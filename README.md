@@ -1,6 +1,6 @@
-<p align="center" style="font-size: 40px;">
+<h1 align="center" >
   ThorShell
-</p>
+</h1>
 
 <p align="center">
   <a href="https://github.com/WesleyDev184/Thor-Shell" target="blank"><img src="public/thor-hammer.png" width="200" alt="Logo" /></a>
