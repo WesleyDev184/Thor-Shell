@@ -36,6 +36,8 @@ git clone "https://github.com/WesleyDev184/Thor-Shell.git"
   
   ```bash
   cd Thor-Shell
+  make
+  ./shell
   ```
 
 3. **Explorando Comandos:** Experimente os comandos aprimorados do ThorShell:
