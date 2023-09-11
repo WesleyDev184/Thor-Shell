@@ -14,7 +14,7 @@ Bem-vindo ao repositório do ThorShell, um shell Linux simples e intuitivo, proj
 
 - **Interface Intuitiva:** O ThorShell foi criado com foco na usabilidade.
 
-- **Comandos Aprimorados:** Desfrute de um conjunto aprimorado de comandos. **(em breve)**
+- **Comandos Aprimorados:** Desfrute de um conjunto aprimorado de comandos. **(em Desenvolvimento)**
 
 - **Personalização Flexível:** Adapte o ThorShell às suas preferências. **(em breve)**
 
@@ -33,18 +33,18 @@ git clone "https://github.com/WesleyDev184/Thor-Shell.git"
 ```
 
 2. **Execução:** Navegue até o diretório onde o ThorShell:
-  
-  ```bash
-  cd Thor-Shell
-  make
-  ./shell
-  ```
+
+```bash
+cd Thor-Shell
+make
+make start
+```
 
 3. **Explorando Comandos:** Experimente os comandos aprimorados do ThorShell:
 
-  ```bash
-  help
-  ```
+```bash
+help
+```
 
 ## Contribuição
 
