@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "../utils.h"
 
 // declaration of functions
@@ -15,7 +16,7 @@ void addCommand(Command **list, char *name, char *description, CommandFunctions 
 /**
  * The function executes a command by searching for it in a linked list and calling its corresponding
  * function.
- * 
+ *
  * @return nothing (void).
  */
 void executeThorCommand()
@@ -43,6 +44,7 @@ void showHistory()
   {
     printf("%d: %s\n", i + 1, history[i]);
   }
+  exit(EXIT_SUCCESS);
 }
 
 /**
@@ -58,6 +60,7 @@ void helpCommand()
     currentCommand = currentCommand->next;
   }
   printf("\n");
+  exit(EXIT_SUCCESS);
 }
 
 /**
@@ -72,7 +75,7 @@ void setupCommandList()
 
 /**
  * The function adds a new command to a linked list of commands.
- * 
+ *
  * @param list A pointer to a pointer of type Command. This is used to keep track of the head of the
  * linked list of commands.
  * @param name A string representing the name of the command.

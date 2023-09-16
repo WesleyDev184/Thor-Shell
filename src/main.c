@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <pwd.h>
 #include "thorCommands/executeThorCommads.c"
 #include "utils.h"
@@ -14,7 +15,12 @@ char cmd[MAX_CMD_SIZE];
 char dir[MAX_PATH_SIZE];
 char *argv[MAX_ARGS];
 char history[HISTORY_SIZE][MAX_CMD_SIZE];
+char *command_background_list[MAX_COMMANDS_list];
+char *pipe_command[MAX_ARGS];
+char *token;
+int background_processes[MAX_COMMANDS_list];
 int history_count = 0;
+int bg_process_count = 0;
 int pid;
 
 void welcomeScreen()
@@ -35,35 +41,128 @@ void welcomeScreen()
 }
 
 /**
- * The function executes a command by either changing the current directory or creating a child process
- * to execute the command.
+ * The function `executeCommand` executes a series of commands, separated by "&" and "|", and handles
+ * input/output redirection and background execution.
  */
 void executeCommand()
 {
-
-  argv[0] = strtok(cmd, " ");
-  argv[1] = strtok(NULL, " ");
-  argv[2] = NULL;
-
-  if (strcmp(argv[0], "cd") == 0)
+  int commands_count = 0;
+  char *command = strtok(cmd, "&");
+  while (command != NULL)
   {
-    if (chdir(argv[1]) != 0)
-      printf("Caminho inválido!\n");
+    command_background_list[commands_count++] = command;
+    command = strtok(NULL, "&");
   }
-  else
+
+  for (int i = 0; i < commands_count; i++)
   {
-    pid = fork();
-    if (pid == 0)
+    int background = 0;
+
+    // Check if the command ends with a space.
+    if (command_background_list[i][strlen(command_background_list[i]) - 1] == ' ')
     {
-      if (execvp(argv[0], argv) == -1)
+      background = 1;
+      command_background_list[i][strlen(command_background_list[i]) - 1] = '\0'; // Remove the space.
+    }
+
+    // Check if the command is a built-in command.
+    token = strtok(command_background_list[i], "|");
+    int pipe_count = 0;
+    while (token != NULL)
+    {
+      pipe_command[pipe_count++] = token;
+      token = strtok(NULL, "|");
+    }
+    pipe_command[pipe_count] = NULL;
+
+    int pipes[2];
+    int prev_pipe = -1;
+
+    for (int j = 0; j < pipe_count; j++)
+    {
+      if (pipe(pipes) == -1)
       {
-        executeThorCommand();
+        perror("pipe");
         exit(EXIT_FAILURE);
       }
+
+      argv[0] = strtok(pipe_command[j], " ");
+      argv[1] = strtok(NULL, " ");
+      argv[2] = NULL;
+
+      pid = fork();
+      if (pid == 0)
+      {
+        // Filho
+
+        if (prev_pipe != -1)
+        {
+          // Redirect standard input to the previous pipe.
+          dup2(prev_pipe, 0);
+          close(prev_pipe);
+        }
+
+        if (j < pipe_count - 1)
+        {
+          // Redirect standard output to pipe.
+          dup2(pipes[1], 1);
+        }
+
+        close(pipes[0]);
+        execvp(argv[0], argv);
+        executeThorCommand();
+        // perror("execvp");
+        exit(EXIT_FAILURE);
+      }
+      else
+      {
+        // Pai
+        if (prev_pipe != -1)
+        {
+          close(prev_pipe);
+        }
+
+        prev_pipe = pipes[0];
+        close(pipes[1]);
+
+        if (!background && j == pipe_count - 1)
+        {
+          // If not in the background and for the last command in the pipe,
+          // wait for the child process.
+          wait(NULL);
+        }
+      }
     }
-    else
+
+    if (background)
     {
-      wait(NULL);
+      // Add the PID of the last background process to the list.
+      background_processes[bg_process_count++] = pid;
+    }
+  }
+}
+
+/**
+ * The sig_child_handler function handles the SIGCHLD signal by waiting for child processes to
+ * terminate and updating the list of background processes.
+ *
+ * @param sig The parameter "sig" is the signal number that triggered the signal handler. In this case,
+ * the signal handler is specifically designed to handle the SIGCHLD signal, which is sent to the
+ * parent process when a child process terminates or stops.
+ */
+void sig_child_handler(int sig)
+{
+  int status;
+  pid_t child_pid;
+  while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0)
+  {
+    for (int i = 0; i < bg_process_count; i++)
+    {
+      if (background_processes[i] == child_pid)
+      {
+        background_processes[i] = 0;
+        break;
+      }
     }
   }
 }
@@ -85,7 +184,7 @@ char *getUsername()
   if (pw != NULL)
     return pw->pw_name;
   else
-    return "";
+    return "Unknow";
 }
 
 /**
@@ -114,6 +213,7 @@ char *getCurrentDirectory()
  */
 int main(void)
 {
+  signal(SIGCHLD, sig_child_handler);
   setupCommandList();
   system("clear");
   welcomeScreen();
