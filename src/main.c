@@ -111,7 +111,7 @@ int main(void)
       currentDirectory = "~";
     }
 
-    printf("\x1b[35m%s@Thor\x1b[0m:\x1b[36m%s\x1b[0m> ", username, currentDirectory);
+    printf("\x1b[35m%s@Thor\x1b[0m in \x1b[36m%s\x1b[0m > ", username, currentDirectory);
     fgets(cmd, 511, stdin);
     cmd[strlen(cmd) - 1] = 0;
 
