@@ -15,13 +15,7 @@ char cmd[MAX_CMD_SIZE];
 char dir[MAX_PATH_SIZE];
 char *argv[MAX_ARGS];
 char history[HISTORY_SIZE][MAX_CMD_SIZE];
-char *command_background_list[MAX_COMMANDS_list];
-char *pipe_command[MAX_ARGS];
-char *token;
-int background_processes[MAX_COMMANDS_list];
 int history_count = 0;
-int bg_process_count = 0;
-int pid;
 
 void welcomeScreen()
 {
@@ -38,133 +32,6 @@ void welcomeScreen()
   printf("              --             \n");
   printf("    Licensed under GPLv3:    \n");
   printf("\n");
-}
-
-/**
- * The function `executeCommand` executes a series of commands, separated by "&" and "|", and handles
- * input/output redirection and background execution.
- */
-void executeCommand()
-{
-  int commands_count = 0;
-  char *command = strtok(cmd, "&");
-  while (command != NULL)
-  {
-    command_background_list[commands_count++] = command;
-    command = strtok(NULL, "&");
-  }
-
-  for (int i = 0; i < commands_count; i++)
-  {
-    int background = 0;
-
-    // Check if the command ends with a space.
-    if (command_background_list[i][strlen(command_background_list[i]) - 1] == ' ')
-    {
-      background = 1;
-      command_background_list[i][strlen(command_background_list[i]) - 1] = '\0'; // Remove the space.
-    }
-
-    // Check if the command is a built-in command.
-    token = strtok(command_background_list[i], "|");
-    int pipe_count = 0;
-    while (token != NULL)
-    {
-      pipe_command[pipe_count++] = token;
-      token = strtok(NULL, "|");
-    }
-    pipe_command[pipe_count] = NULL;
-
-    int pipes[2];
-    int prev_pipe = -1;
-
-    for (int j = 0; j < pipe_count; j++)
-    {
-      if (pipe(pipes) == -1)
-      {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-      }
-
-      argv[0] = strtok(pipe_command[j], " ");
-      argv[1] = strtok(NULL, " ");
-      argv[2] = NULL;
-
-      pid = fork();
-      if (pid == 0)
-      {
-        // Filho
-
-        if (prev_pipe != -1)
-        {
-          // Redirect standard input to the previous pipe.
-          dup2(prev_pipe, 0);
-          close(prev_pipe);
-        }
-
-        if (j < pipe_count - 1)
-        {
-          // Redirect standard output to pipe.
-          dup2(pipes[1], 1);
-        }
-
-        close(pipes[0]);
-        execvp(argv[0], argv);
-        executeThorCommand();
-        // perror("execvp");
-        exit(EXIT_FAILURE);
-      }
-      else
-      {
-        // Pai
-        if (prev_pipe != -1)
-        {
-          close(prev_pipe);
-        }
-
-        prev_pipe = pipes[0];
-        close(pipes[1]);
-
-        if (!background && j == pipe_count - 1)
-        {
-          // If not in the background and for the last command in the pipe,
-          // wait for the child process.
-          wait(NULL);
-        }
-      }
-    }
-
-    if (background)
-    {
-      // Add the PID of the last background process to the list.
-      background_processes[bg_process_count++] = pid;
-    }
-  }
-}
-
-/**
- * The sig_child_handler function handles the SIGCHLD signal by waiting for child processes to
- * terminate and updating the list of background processes.
- *
- * @param sig The parameter "sig" is the signal number that triggered the signal handler. In this case,
- * the signal handler is specifically designed to handle the SIGCHLD signal, which is sent to the
- * parent process when a child process terminates or stops.
- */
-void sig_child_handler(int sig)
-{
-  int status;
-  pid_t child_pid;
-  while ((child_pid = waitpid(-1, &status, WNOHANG)) > 0)
-  {
-    for (int i = 0; i < bg_process_count; i++)
-    {
-      if (background_processes[i] == child_pid)
-      {
-        background_processes[i] = 0;
-        break;
-      }
-    }
-  }
 }
 
 /**
@@ -217,12 +84,34 @@ int main(void)
   setupCommandList();
   system("clear");
   welcomeScreen();
+
+  char *home_directory;
+  if ((home_directory = getenv("HOME")) == NULL)
+  {
+    // If the HOME environment variable is not set, use /home/username as the default
+    struct passwd *pw = getpwuid(getuid());
+    home_directory = pw->pw_dir;
+  }
+
+  // Change to home directory
+  if (chdir(home_directory) != 0)
+  {
+    perror("chdir");
+    exit(EXIT_FAILURE);
+  }
+
   while (1)
   {
     // Prompt the user for a command
     char *username = getUsername();
     char *currentDirectory = getCurrentDirectory();
-    printf("\x1b[35m%s@Thor\x1b[0m:\x1b[36m%s\x1b[0m$ ", username, currentDirectory);
+
+    if (strcmp(currentDirectory, home_directory) == 0)
+    {
+      currentDirectory = "~";
+    }
+
+    printf("\x1b[35m%s@Thor\x1b[0m:\x1b[36m%s\x1b[0m> ", username, currentDirectory);
     fgets(cmd, 511, stdin);
     cmd[strlen(cmd) - 1] = 0;
 
