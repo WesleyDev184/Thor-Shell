@@ -9,12 +9,12 @@
 #include <time.h>
 #include <string.h>
 #include <dirent.h>
+#include <ctype.h>
 #include "../utils.h"
 
-char *command_background_list[MAX_COMMANDS_list];
-char *pipe_command[MAX_ARGS];
-char *token;
-int background_processes[MAX_COMMANDS_list];
+char *process_background_list[MAX_COMMANDS_list];
+char *token_precess;
+int background_processes_exec[MAX_COMMANDS_list];
 int bg_process_count = 0;
 int pid;
 
@@ -22,11 +22,18 @@ int pid;
 void executeThorCommand();
 void setupCommandList();
 void executeCommand();
+void executeSingleCommand(char *command);
+void checkAndRemoveTrailingSpace(char *command, int *background);
+void splitCommand(char *command, char *command_list[], int *command_count);
+void processCommand(char *command_list[], int command_count, int background);
+void handleCdCommand(char *argv[]);
+void executeChildProcess(char *argv[], int prev_pipe, int pipes[], int j, int command_count);
 void automaticCompilation(char *program_name);
-int fileExists(const char *directory, const char *prefixo);
+int fileExists(const char *directory, const char *prefix);
 void showHistory();
 void helpCommand();
 void addCommand(Command **list, char *name, char *description, CommandFunctions function);
+void sig_child_handler(int sig);
 
 /**
  * The function executes a command by searching for it in a linked list and calling its corresponding
@@ -36,7 +43,7 @@ void addCommand(Command **list, char *name, char *description, CommandFunctions 
  */
 void executeThorCommand()
 {
-  Command *currentCommand = commandList;
+  Command *currentCommand = thorCommandList;
   while (currentCommand != NULL)
   {
     if (strcmp(currentCommand->name, argv[0]) == 0)
@@ -63,120 +70,210 @@ void executeThorCommand()
  */
 void setupCommandList()
 {
-  addCommand(&commandList, "help", "Show all commands", helpCommand);
-  addCommand(&commandList, "history", "see the history of commands already used", showHistory);
+  addCommand(&thorCommandList, "help", "Show all commands", helpCommand);
+  addCommand(&thorCommandList, "history", "see the history of commands already used", showHistory);
 }
 
 /**
- * The function `executeCommand` executes a series of commands, separated by "&" and "|", and handles
- * input/output redirection and background execution.
+ * The function executeCommand() separates a string of commands by '&' and processes each command
+ * individually.
  */
 void executeCommand()
 {
   int commands_count = 0;
   char *command = strtok(cmd, "&");
+
+  // Loop to separate commands by '&'
   while (command != NULL)
   {
-    command_background_list[commands_count++] = command;
+    process_background_list[commands_count++] = command;
     command = strtok(NULL, "&");
   }
 
+  // Loop to process each command
   for (int i = 0; i < commands_count; i++)
   {
-    int background = 0;
+    executeSingleCommand(process_background_list[i]);
+  }
+}
 
-    // Check if the command ends with a space.
-    if (command_background_list[i][strlen(command_background_list[i]) - 1] == ' ')
+/**
+ * The function executes a single command, checking for background execution and handling pipes if
+ * necessary.
+ *
+ * @param command A pointer to a character array representing the command to be executed.
+ */
+void executeSingleCommand(char *command)
+{
+  int background = 0;
+  checkAndRemoveTrailingSpace(command, &background);
+
+  int command_count = 0;
+  char *command_list[command_count + 1];
+
+  splitCommand(command, command_list, &command_count);
+
+  processCommand(command_list, command_count, background);
+}
+
+/**
+ * The function checks if the last character of a given command is a space, and if so, removes it and
+ * sets a background flag.
+ *
+ * @param command A pointer to a character array representing a command.
+ * @param background A pointer to an integer variable that indicates whether the command should be
+ * executed in the background or not. If the value of *background is 1, it means the command should be
+ * executed in the background. If the value is 0, it means the command should be executed in the
+ * foreground.
+ */
+void checkAndRemoveTrailingSpace(char *command, int *background)
+{
+  if (command[strlen(command) - 1] == ' ')
+  {
+    *background = 1;
+    command[strlen(command) - 1] = '\0'; // Remove space.
+  }
+}
+
+/**
+ * The function splits a command string by the pipe character "|" and stores the individual commands in
+ * an array.
+ *
+ * @param command A string containing the command to be split by pipe characters (|).
+ * @param command_list An array of strings where each element will store a command separated by a pipe
+ * symbol (|).
+ * @param command_count The `command_count` parameter is a pointer to an integer variable that will store the
+ * number of pipe commands found in the `command` string.
+ */
+void splitCommand(char *command, char *command_list[], int *command_count)
+{
+  char *token_precess;
+  token_precess = strtok(command, "|");
+  *command_count = 0;
+  while (token_precess != NULL)
+  {
+    command_list[(*command_count)++] = token_precess;
+    token_precess = strtok(NULL, "|");
+  }
+  command_list[*command_count] = NULL;
+}
+
+/**
+ * The function `processCommand` executes a series of commands separated by pipes, creating child
+ * processes for each command and handling the `cd` command separately.
+ *
+ * @param command_list An array of strings representing the commands to be executed in the pipeline.
+ * Each string represents a single command with its arguments separated by spaces.
+ * @param command_count The `command_count` parameter represents the number of pipes in the command. It
+ * indicates how many separate commands are being piped together.
+ * @param background An integer variable indicating whether the command should be executed in the
+ * background or not. If background is 1, the command should be executed in the background. If
+ * background is 0, the command should be executed in the foreground.
+ */
+void processCommand(char *command_list[], int command_count, int background)
+{
+  int pipes[2];
+  int prev_pipe = -1;
+  int pid;
+
+  for (int j = 0; j < command_count; j++)
+  {
+    if (pipe(pipes) == -1)
     {
-      background = 1;
-      command_background_list[i][strlen(command_background_list[i]) - 1] = '\0'; // Remove the space.
+      perror("pipe");
+      exit(EXIT_FAILURE);
     }
 
-    // Check if the command is a built-in command.
-    token = strtok(command_background_list[i], "|");
-    int pipe_count = 0;
-    while (token != NULL)
+    argv[0] = strtok(command_list[j], " ");
+    argv[1] = strtok(NULL, " ");
+    argv[2] = NULL;
+
+    if (strcmp(argv[0], "cd") == 0)
     {
-      pipe_command[pipe_count++] = token;
-      token = strtok(NULL, "|");
+      handleCdCommand(argv);
     }
-    pipe_command[pipe_count] = NULL;
-
-    int pipes[2];
-    int prev_pipe = -1;
-
-    for (int j = 0; j < pipe_count; j++)
+    else
     {
-      if (pipe(pipes) == -1)
+      pid = fork();
+      if (pid == 0)
       {
-        perror("pipe");
-        exit(EXIT_FAILURE);
-      }
-
-      argv[0] = strtok(pipe_command[j], " ");
-      argv[1] = strtok(NULL, " ");
-      argv[2] = NULL;
-
-      if (strcmp(argv[0], "cd") == 0)
-      {
-        if (chdir(argv[1]) != 0)
-        {
-          printf("Caminho inválido!\n");
-        }
+        executeChildProcess(argv, prev_pipe, pipes, j, command_count);
       }
       else
       {
-        pid = fork();
-        if (pid == 0)
+        if (prev_pipe != -1)
         {
-          // son
-
-          if (prev_pipe != -1)
-          {
-            // Redirect standard input to the previous pipe.
-            dup2(prev_pipe, 0);
-            close(prev_pipe);
-          }
-
-          if (j < pipe_count - 1)
-          {
-            // Redirect standard output to pipe.
-            dup2(pipes[1], 1);
-          }
-
-          close(pipes[0]);
-          execvp(argv[0], argv);
-          executeThorCommand();
-          perror("execvp");
-          exit(EXIT_FAILURE);
+          close(prev_pipe);
         }
-        else
+
+        prev_pipe = pipes[0];
+        close(pipes[1]);
+
+        if (!background && j == command_count - 1)
         {
-          // father
-          if (prev_pipe != -1)
-          {
-            close(prev_pipe);
-          }
-
-          prev_pipe = pipes[0];
-          close(pipes[1]);
-
-          if (!background && j == pipe_count - 1)
-          {
-            // If not in the background and for the last command in the pipe,
-            // wait for the child process.
-            wait(NULL);
-          }
+          wait(NULL);
         }
       }
     }
-
-    if (background)
-    {
-      // Add the PID of the last background process to the list.
-      background_processes[bg_process_count++] = pid;
-    }
   }
+
+  if (background)
+  {
+    // Adicione o PID do último processo em segundo plano à lista.
+    background_processes_exec[bg_process_count++] = pid;
+  }
+}
+
+/**
+ * The function handles the "cd" command by changing the current directory to the specified path.
+ *
+ * @param argv An array of strings, where each string represents a command-line argument. The first
+ * element (argv[0]) is typically the name of the program being executed, and the subsequent elements
+ * (argv[1], argv[2], etc.) are the arguments passed to the program. In this case, argv
+ */
+void handleCdCommand(char *argv[])
+{
+  if (chdir(argv[1]) != 0)
+  {
+    printf("Caminho inválido!\n");
+  }
+}
+
+/**
+ * The function executes a child process with the given arguments and handles input/output redirection
+ * using pipes.
+ *
+ * @param argv An array of strings representing the command and its arguments to be executed in the
+ * child process.
+ * @param prev_pipe The "prev_pipe" parameter is the file descriptor of the previous pipe. It is used
+ * to redirect the standard input of the child process to the output of the previous command in the
+ * pipeline. If there is no previous pipe, the value of "prev_pipe" will be -1.
+ * @param pipes The "pipes" parameter is an array of file descriptors used for inter-process
+ * communication. It is used to pass data between the parent process and its child processes. The array
+ * contains two file descriptors: pipes[0] is used for reading from the pipe, and pipes[1] is used for
+ * writing
+ * @param j The parameter "j" represents the index of the current child process in the array of child
+ * processes.
+ * @param command_count The `command_count` parameter represents the total number of pipes in the pipeline.
+ */
+void executeChildProcess(char *argv[], int prev_pipe, int pipes[], int j, int command_count)
+{
+  if (prev_pipe != -1)
+  {
+    dup2(prev_pipe, 0);
+    close(prev_pipe);
+  }
+
+  if (j < command_count - 1)
+  {
+    dup2(pipes[1], 1);
+  }
+
+  close(pipes[0]);
+  execvp(argv[0], argv);
+  executeThorCommand();
+  perror("execvp");
+  exit(EXIT_FAILURE);
 }
 
 /**
@@ -232,14 +329,14 @@ void automaticCompilation(char *name)
  *
  * @param directory The `directory` parameter is a string that represents the directory path where you
  * want to search for files.
- * @param prefixo The parameter "prefixo" is a string that represents the prefix that the file name
+ * @param prefix The parameter "prefix" is a string that represents the prefix that the file name
  * should start with.
  *
  * @return The function `fileExists` returns an integer value. It returns 1 if a file with the given
  * prefix and a .c extension is found in the specified directory. It returns 0 if no such file is found
  * or if there is an error opening the directory.
  */
-int fileExists(const char *directory, const char *prefixo)
+int fileExists(const char *directory, const char *prefix)
 {
   DIR *dp;
   struct dirent *entry;
@@ -256,7 +353,7 @@ int fileExists(const char *directory, const char *prefixo)
   while ((entry = readdir(dp)))
   {
     // Checks if the file name starts with the prefix
-    if (strncmp(prefixo, entry->d_name, strlen(prefixo)) == 0)
+    if (strncmp(prefix, entry->d_name, strlen(prefix)) == 0)
     {
       // Checks if the file has a .c extension
       size_t len = strlen(entry->d_name);
@@ -292,7 +389,7 @@ void showHistory()
 void helpCommand()
 {
   printf("Commands:\n\n");
-  Command *currentCommand = commandList;
+  Command *currentCommand = thorCommandList;
   while (currentCommand != NULL)
   {
     printf("%s - %s\n", currentCommand->name, currentCommand->description);
@@ -339,9 +436,9 @@ void sig_child_handler(int sig)
   {
     for (int i = 0; i < bg_process_count; i++)
     {
-      if (background_processes[i] == child_pid)
+      if (background_processes_exec[i] == child_pid)
       {
-        background_processes[i] = 0;
+        background_processes_exec[i] = 0;
         break;
       }
     }

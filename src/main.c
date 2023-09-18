@@ -10,7 +10,7 @@
 #include "thorCommands/executeThorCommads.c"
 #include "utils.h"
 
-Command *commandList = NULL; // start command list
+Command *thorCommandList = NULL; // start command list
 char cmd[MAX_CMD_SIZE];
 char dir[MAX_PATH_SIZE];
 char *argv[MAX_ARGS];
@@ -73,6 +73,22 @@ char *getCurrentDirectory()
 }
 
 /**
+ * The function "prompt" prints a formatted prompt with the username and current directory.
+ */
+void prompt()
+{
+  char *username = getUsername();
+  char *currentDirectory = getCurrentDirectory();
+
+  if (strcmp(currentDirectory, getenv("HOME")) == 0)
+  {
+    currentDirectory = "~";
+  }
+
+  printf("\x1b[35m%s@Thor\x1b[0m in \x1b[36m%s\x1b[0m > ", username, currentDirectory);
+}
+
+/**
  * The main function sets up a command line interface, prompts the user for commands, stores them in
  * history, and executes them.
  *
@@ -102,16 +118,7 @@ int main(void)
 
   while (1)
   {
-    // Prompt the user for a command
-    char *username = getUsername();
-    char *currentDirectory = getCurrentDirectory();
-
-    if (strcmp(currentDirectory, home_directory) == 0)
-    {
-      currentDirectory = "~";
-    }
-
-    printf("\x1b[35m%s@Thor\x1b[0m in \x1b[36m%s\x1b[0m > ", username, currentDirectory);
+    prompt();
     fgets(cmd, 511, stdin);
     cmd[strlen(cmd) - 1] = 0;
 

@@ -24,6 +24,6 @@ extern char dir[MAX_PATH_SIZE];                  // Current directory path
 extern char *argv[MAX_ARGS];                     // Vector to store command arguments
 extern char history[HISTORY_SIZE][MAX_CMD_SIZE]; // Matrix to store historical commands
 extern int history_count;                        // Historical command counter
-extern Command *commandList;                     // Command list
+extern Command *thorCommandList;                     // Command list
 
 #endif
