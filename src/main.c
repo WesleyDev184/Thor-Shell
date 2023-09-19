@@ -105,9 +105,8 @@ int main(void)
 
   if (commandPath == NULL)
   {
-    // Se a variável CAMINHO não estiver definida, defina-a com um valor padrão
     char *defaultPath = "/usr/local/bin:/usr/bin";
-    int overwrite = 1; // Defina para 1 para substituir o valor existente, se houver
+    int overwrite = 1;
     if (setenv("CAMINHO", defaultPath, overwrite) != 0)
     {
       perror("setenv");
