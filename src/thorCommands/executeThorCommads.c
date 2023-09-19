@@ -240,21 +240,20 @@ void handleCdCommand(char *argv[])
 }
 
 /**
- * The function executes a child process with the given arguments and handles input/output redirection
- * using pipes.
- *
+ * The function executes a child process with the given arguments and handles the execution of the
+ * command using the provided paths.
+ * 
  * @param argv An array of strings representing the command and its arguments to be executed in the
  * child process.
- * @param prev_pipe The "prev_pipe" parameter is the file descriptor of the previous pipe. It is used
- * to redirect the standard input of the child process to the output of the previous command in the
- * pipeline. If there is no previous pipe, the value of "prev_pipe" will be -1.
- * @param pipes The "pipes" parameter is an array of file descriptors used for inter-process
- * communication. It is used to pass data between the parent process and its child processes. The array
- * contains two file descriptors: pipes[0] is used for reading from the pipe, and pipes[1] is used for
- * writing
- * @param j The parameter "j" represents the index of the current child process in the array of child
- * processes.
- * @param command_count The `command_count` parameter represents the total number of pipes in the pipeline.
+ * @param prev_pipe The `prev_pipe` parameter is the file descriptor of the previous pipe. It is used
+ * to redirect the standard input of the child process to the read end of the previous pipe, if there
+ * is one. If `prev_pipe` is -1, it means there is no previous pipe and the child
+ * @param pipes An array of file descriptors for the pipe. pipes[0] is the read end of the pipe and
+ * pipes[1] is the write end of the pipe.
+ * @param j The variable `j` represents the index of the current command being executed in a series of
+ * commands. It is used to determine if the current command is the last command in the series or not.
+ * @param command_count The parameter `command_count` represents the total number of commands in the
+ * input.
  */
 void executeChildProcess(char *argv[], int prev_pipe, int pipes[], int j, int command_count)
 {
@@ -272,17 +271,17 @@ void executeChildProcess(char *argv[], int prev_pipe, int pipes[], int j, int co
   close(pipes[0]);
 
   // Tokenize the path variable to get individual paths
-  char *token = strtok(commandPath, ":");
-  while (token != NULL)
+  char *token_path = strtok(commandPath, ":");
+  while (token_path != NULL)
   {
     char path[MAX_PATH_SIZE]; // Adjust the size as needed
-    snprintf(path, sizeof(path), "%s/%s", token, argv[0]);
+    snprintf(path, sizeof(path), "%s/%s", token_path, argv[0]);
 
     // Attempt to execute the command with the full path
     execv(path, argv);
 
     // If execv fails, try the next path in the list
-    token = strtok(NULL, ":");
+    token_path = strtok(NULL, ":");
   }
 
   // If we reach here, execv has failed for all paths
