@@ -103,6 +103,7 @@ int main(void)
   welcomeScreen();
   commandPath = getenv("CAMINHO");
 
+  // defines the default path if the commandpath is null
   if (commandPath == NULL)
   {
     char *defaultPath = "/usr/local/bin:/usr/bin";
