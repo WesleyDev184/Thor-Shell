@@ -270,9 +270,24 @@ void executeChildProcess(char *argv[], int prev_pipe, int pipes[], int j, int co
   }
 
   close(pipes[0]);
-  execvp(argv[0], argv);
-  executeThorCommand();
-  perror("execvp");
+
+  // Tokenize the path variable to get individual paths
+  char *token = strtok(commandPath, ":");
+  while (token != NULL)
+  {
+    char path[MAX_PATH_SIZE]; // Adjust the size as needed
+    snprintf(path, sizeof(path), "%s/%s", token, argv[0]);
+
+    // Attempt to execute the command with the full path
+    execv(path, argv);
+
+    // If execv fails, try the next path in the list
+    token = strtok(NULL, ":");
+  }
+
+  // If we reach here, execv has failed for all paths
+  executeThorCommand(); // Execute an alternative command or handle the failure as needed
+  perror("execv");
   exit(EXIT_FAILURE);
 }
 

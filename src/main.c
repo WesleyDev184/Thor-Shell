@@ -15,6 +15,7 @@ char cmd[MAX_CMD_SIZE];
 char dir[MAX_PATH_SIZE];
 char *argv[MAX_ARGS];
 char history[HISTORY_SIZE][MAX_CMD_SIZE];
+char *commandPath;
 int history_count = 0;
 
 void welcomeScreen()
@@ -100,6 +101,21 @@ int main(void)
   setupCommandList();
   system("clear");
   welcomeScreen();
+  commandPath = getenv("CAMINHO");
+
+  if (commandPath == NULL)
+  {
+    // Se a variável CAMINHO não estiver definida, defina-a com um valor padrão
+    char *defaultPath = "/usr/local/bin:/usr/bin";
+    int overwrite = 1; // Defina para 1 para substituir o valor existente, se houver
+    if (setenv("CAMINHO", defaultPath, overwrite) != 0)
+    {
+      perror("setenv");
+      exit(EXIT_FAILURE);
+    }
+
+    commandPath = getenv("CAMINHO");
+  }
 
   char *home_directory;
   if ((home_directory = getenv("HOME")) == NULL)
